@@ -2,8 +2,49 @@ local M = {
 	state = {
 		window_id = nil,
 		job_id = nil,
+		old_win_id = nil,
 	},
 }
+
+local api = vim.api
+
+api.nvim_create_augroup("ecl.nvim_autocmds", { clear = true })
+api.nvim_create_autocmd({ "TermLeave" }, {
+	group = "ecl.nvim_autocmds",
+	pattern = "*",
+	callback = function()
+		local win = api.nvim_get_current_win()
+		if win == M.state.window_id then
+			api.nvim_set_current_win(M.state.old_win_id)
+		end
+	end,
+})
+api.nvim_create_autocmd({ "WinEnter" }, {
+	group = "ecl.nvim_autocmds",
+	pattern = "*",
+	callback = function()
+		local win = api.nvim_get_current_win()
+		if win == M.state.window_id then
+			-- if in visual mode, exit it
+			api.nvim_win_call(win, function()
+				if string.match(string.lower(api.nvim_get_mode()["mode"]), "v") ~= nil then
+					vim.cmd("normal esc")
+				end
+				vim.cmd("startinsert")
+			end)
+		end
+	end,
+})
+api.nvim_create_autocmd({ "WinLeave" }, {
+	group = "ecl.nvim_autocmds",
+	pattern = "*",
+	callback = function()
+		local win = api.nvim_get_current_win()
+		if win ~= M.state.window_id then
+			M.state.old_win_id = win
+		end
+	end,
+})
 
 local function strip(s)
 	return s:gsub("^%s*(.-)%s*$", "%1")
@@ -80,12 +121,13 @@ local function run_eclipse_in_terminal(opt)
 
 	local file = vim.fn.expand("%:p")
 
-	if M.state.job_id == nil then
+	M.state.old_win_id = api.nvim_get_current_win()
+	if M.state.job_id == nil or not api.nvim_win_is_valid(M.state.window_id) then
 		vim.cmd("split")
 		vim.cmd("resize -12")
-		M.state.window_id = vim.api.nvim_get_current_win()
-		local eclipse_buf = vim.api.nvim_create_buf(false, true)
-		vim.api.nvim_win_set_buf(M.state.window_id, eclipse_buf)
+		M.state.window_id = api.nvim_get_current_win()
+		local eclipse_buf = api.nvim_create_buf(false, true)
+		api.nvim_win_set_buf(M.state.window_id, eclipse_buf)
 		M.state.job_id = vim.fn.termopen("eclipse", {
 			on_exit = function(_, _)
 				M.state.window_id = nil
@@ -101,11 +143,11 @@ local function run_eclipse_in_terminal(opt)
 		"",
 	})
 
-	vim.api.nvim_set_current_win(M.state.window_id)
+	api.nvim_set_current_win(M.state.window_id)
 
 	vim.fn.wait(150, false)
 	-- if in visual mode, exit it
-	if string.match(string.lower(vim.api.nvim_get_mode()["mode"]), "v") ~= nil then
+	if string.match(string.lower(api.nvim_get_mode()["mode"]), "v") ~= nil then
 		vim.cmd("normal esc")
 	end
 	vim.cmd("startinsert")
